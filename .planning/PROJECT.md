@@ -56,7 +56,9 @@ Typing `til "<one line>"` must reliably append that line to today's dated Markdo
 | Append-only writes | Protects the Core Value (no data loss) | — Pending |
 | Local timezone for "today" | Matches the user's sense of "today" | — Pending |
 | Project lives in its own folder `til-cli/` with its own git repo | Parent folder contains unrelated files | ✓ Good |
-| Implementation language/runtime | Deferred to research | — Pending |
+| Node.js ≥22.12 + TypeScript + commander, bundled with tsdown, tested with vitest, distributed via `npm i -g` | Already installed on author's machine; Korean argv/UTF-8 verified in prototype on Windows; Python hit cp949 errors; Go/Rust not installed | — Pending |
+| Entry format `- HH:MM text` (time prefix on by default; toggle deferred to v2) | PROJECT.md allows optional time; one fixed default keeps v1 simple | — Pending |
+| LF line endings, UTF-8 without BOM on all OSes | Git-friendly; avoids mixed CRLF/LF and BOM mid-file | — Pending |
 
 ## Evolution
 
