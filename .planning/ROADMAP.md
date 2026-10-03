@@ -34,11 +34,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. `til -- -text` and `til add show me` record their text literally instead of treating it as a flag or subcommand. `til --help` and `til --version` respond.
   5. Empty or whitespace-only input gives a clear error and a non-zero exit code, and writes nothing. A failed write (e.g. an unwritable storage directory) prints an error on stderr that includes the unsaved text, and exits non-zero.
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md — Walking skeleton: package-legitimacy gate + tracer `til 한글 😀` end-to-end through a tarball-installed npm shim (wave 1)
+- [x] 01-01-PLAN.md — Walking skeleton: package-legitimacy gate + tracer `til 한글 😀` end-to-end through a tarball-installed npm shim (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — Command grammar: reserved first words, `--`/`add` escapes, `--help`/`--version`, usage errors with exit 2 (wave 2)
@@ -80,5 +80,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Safe Capture | 0/4 | Planned | - |
+| 1. Safe Capture | 1/4 | In Progress|  |
 | 2. Read Back & README | 0/TBD | Not started | - |
