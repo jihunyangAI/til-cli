@@ -49,6 +49,17 @@ Auto mode: every decision below was auto-selected as the recommended option (no 
 - **D-16:** Package name `til-cli`, `bin: { "til": "dist/cli.mjs" }`, ESM, Node `>=22.12`. Phase 1 install path is `npm install -g .` from the repo (plus `npm link` for development); no `npm publish`. Add `.gitattributes` forcing LF (shebang safety) and a `files` whitelist including `dist/`.
 - **D-17:** Stack per PROJECT.md Key Decisions: TypeScript (typecheck only) + commander 15 + tsdown (pinned) + vitest. `node:util parseArgs` is an acceptable swap for commander if commander's variadic/`--` handling fights D-01/D-02 — planner's call.
 
+### Amendments from Phase Research (2026-10-04)
+These supersede the wording of earlier decisions where they conflict. Evidence in `01-RESEARCH.md`.
+- **D-10a (amends D-10):** Heading creation uses flag `ax` (`O_APPEND|O_CREAT|O_EXCL`), NOT `wx` — a `wx` handle is non-append and overwrote entries appended in the gap (18/20 survived). On `EEXIST` fall back to plain append. Worst case is a cosmetic duplicate heading, never data loss. The 20-process gate passed with `a`/`ax`; no retry/lock needed (D-11 satisfied).
+- **D-17a (amends D-17):** Use a hand-rolled pure `parseArgv` (zero runtime dependencies) instead of commander — commander 15 cannot express D-01..D-05 (`til -- show` routes to subcommand, `til help` becomes text, unknown option exits 1 not 2).
+- **D-18:** PowerShell 5.1's npm `til.ps1` shim swallows an unquoted `--`. `til` cannot fix this. The unknown-option error message must suggest the PowerShell-safe form `til '--' <text>` (and `til add <text>`); CAPT-03 is verified through the real shims, with PowerShell using the quoted form. Carry the caveat into the Phase 2 README.
+- **D-19:** Install flow is `npm install` then `npm install -g .` (symlink, dev) — or `npm pack` + `npm i -g ./til-cli-<version>.tgz` for a real copy. `package.json` has `"private": true` (no accidental publish).
+- **D-20:** `.gitattributes` with `* text=auto eol=lf` is committed before any source file (CRLF shebang risk with `core.autocrlf=true`).
+- **D-21:** Clock is injected; tests set `process.env.TZ` in-process (works on Windows) and build expected values from local components.
+- **D-22:** STOR-04 non-Windows proof: OS-independent byte tests + a static ban on `os.EOL`/locale formatting; add a GitHub Actions windows+ubuntu matrix file, but running it needs a remote that does not exist yet — the non-Windows run is a human-verify / deferred item, not a blocker for Phase 1.
+- **D-23:** D-05 applies literally: an argument starting with `-` before `--` is a usage error, even if it contains spaces. Revisit later if annoying.
+
 ### Claude's Discretion
 - Internal module layout (functional core / imperative shell suggested in research ARCHITECTURE.md).
 - Exact wording of help, error, and "not available yet" messages (keep them short; Korean or English both fine — default English).
