@@ -1,4 +1,4 @@
-import { closeSync, mkdirSync, openSync, writeSync } from 'node:fs';
+import { closeSync, fstatSync, mkdirSync, openSync, readSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { dayFileName, dayHeading } from './core/format.ts';
 
@@ -9,10 +9,19 @@ function writeAll(fd: number, buf: Buffer): void {
   }
 }
 
-function appendExisting(file: string, _date: string, line: string): void {
-  const fd = openSync(file, 'a');
+function appendExisting(file: string, date: string, line: string): void {
+  const fd = openSync(file, 'a+');
   try {
-    writeAll(fd, Buffer.from(line, 'utf8'));
+    const { size } = fstatSync(fd);
+    let prefix = '';
+    if (size === 0) {
+      prefix = dayHeading(date);
+    } else {
+      const last = Buffer.alloc(1);
+      readSync(fd, last, 0, 1, size - 1);
+      if (last[0] !== 0x0a) prefix = '\n';
+    }
+    writeAll(fd, Buffer.from(prefix + line, 'utf8'));
   } finally {
     closeSync(fd);
   }
