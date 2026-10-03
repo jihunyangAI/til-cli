@@ -16,6 +16,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:stress": "node scripts/stress.mjs",
     "prepare": "npm run build"
   },
   "devDependencies": {
