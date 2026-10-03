@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Safe Capture
+
 **Goal**: The user can install `til` once and record a one-line learning from any Windows shell into today's local-date Markdown file. Every entry is kept exactly as typed (Korean and emoji included), even across repeated runs, concurrent runs, and failed writes.
 **Mode:** mvp
 **Depends on**: Nothing (first phase)
@@ -32,7 +33,19 @@ Decimal phases appear between their surrounding integers in numeric order.
      - The file stays UTF-8 without BOM, uses only LF line endings, and keeps Korean and emoji byte-exact.
   4. `til -- -text` and `til add show me` record their text literally instead of treating it as a flag or subcommand. `til --help` and `til --version` respond.
   5. Empty or whitespace-only input gives a clear error and a non-zero exit code, and writes nothing. A failed write (e.g. an unwritable storage directory) prints an error on stderr that includes the unsaved text, and exits non-zero.
-**Plans**: TBD
+
+**Plans**: 4 plans
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — Walking skeleton: package-legitimacy gate + tracer `til 한글 😀` end-to-end through a tarball-installed npm shim (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-02-PLAN.md — Command grammar: reserved first words, `--`/`add` escapes, `--help`/`--version`, usage errors with exit 2 (wave 2)
+- [ ] 01-03-PLAN.md — Write safety: hand-edited/empty-file repair, local-date and midnight proofs, failure path, 20-process stress gate (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-04-PLAN.md — Distribution: PowerShell 5.1/cmd/Git Bash shim matrix, windows+ubuntu CI file, global install, end-of-phase fresh-window check (wave 3)
 
 **Notes for planning:**
 - Open grammar decision for discuss-phase: what bare `til` with no arguments does (print today's entries or print help). CAPT-05 only covers empty or whitespace text.
@@ -42,6 +55,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - The confirmation output (CAPT-06) prints Korean text through the same console path that VIEW-04 checks in Phase 2. Build that output writer here.
 
 ### Phase 2: Read Back & README
+
 **Goal**: The user can print any day's learnings in the terminal, with Korean displayed correctly in every Windows shell. A new user can get from the README alone to a working `til`.
 **Mode:** mvp
 **Depends on**: Phase 1
@@ -51,6 +65,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Malformed or non-calendar dates (e.g. `til show 2026-02-30`, `til show ../secret`) are rejected with a clear error and a non-zero exit code, and nothing outside the storage directory is ever read. A valid date that has no file gets a friendly "no entries" message, not a stack trace.
   3. Korean entries printed by `til show` display correctly (no `?` or mojibake) in PowerShell 5.1, PowerShell 7, Git Bash, and cmd.
   4. The README covers install, recording and showing entries, where files are stored (`~/til`, `TIL_DIR`), and a quoting cheat-sheet (PowerShell `$` and backtick, bash `!`). Following it in a fresh shell yields a working `til`.
+
 **Plans**: TBD
 **UI hint**: no
 
@@ -65,5 +80,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Safe Capture | 0/TBD | Not started | - |
+| 1. Safe Capture | 0/4 | Planned | - |
 | 2. Read Back & README | 0/TBD | Not started | - |
