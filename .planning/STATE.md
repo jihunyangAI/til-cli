@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Safe Capture
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-10-03T17:09:06.674Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-10-03T17:15:37.883Z"
 last_activity: 2026-10-04
 last_activity_desc: Phase 01 execution started
-state_head: 307cb7845fa9aacffeaf2fe3133ea409f0c83f57
+state_head: a09d1059e01aa057141cfddcb868df7ad5159fa0
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 ## Current Position
 
 Phase: 01 (Safe Capture) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-10-04 — Phase 01 execution started
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P01 | 8 min | 2 tasks | 16 files |
+| Phase 01 P02 | 3 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,7 @@ Recent decisions affecting current work:
 - [Init]: Entries use the format `- HH:MM text`. Files are UTF-8 without BOM, LF only, and dated by the local date.
 - [Phase 01]: Package legitimacy approved by human: tsdown 0.23.0, vitest 5.0.3, typescript 7.0.2 (no ^6 fallback needed), @types/node 22.20.5
 - [Phase 01]: Commits on master allowed by human (git.allow_default_branch_commits true); zero runtime deps, hand-rolled parseArgv, ax exclusive-append storage
+- [Phase 01]: Reserved words (add/show/list/help) match only as the exact case-sensitive first argument; dash-prefixed args >1 char before -- are options even with spaces (D-23); usage errors always carry the PowerShell-safe til '--' hint (D-18)
 
 ### Pending Todos
 
@@ -91,6 +93,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T17:09:06.622Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-10-03T17:15:37.855Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None

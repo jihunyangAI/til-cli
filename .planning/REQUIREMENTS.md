@@ -9,11 +9,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Capture
 
-- [ ] **CAPT-01**: User can run `til "some text"` and the text is appended as a new entry to today's `YYYY-MM-DD.md`
-- [ ] **CAPT-02**: User can run `til some words` without quotes and all words are joined into one entry
+- [x] **CAPT-01**: User can run `til "some text"` and the text is appended as a new entry to today's `YYYY-MM-DD.md`
+- [x] **CAPT-02**: User can run `til some words` without quotes and all words are joined into one entry
 - [ ] **CAPT-03**: User can record text that starts with `-` or with a reserved word (e.g. `show`) by using `til -- <text>` or `til add <text>`
 - [ ] **CAPT-04**: Each entry is written as a single Markdown list item prefixed with the local time, e.g. `- 14:30 text`; multi-line input is normalized to one line
-- [ ] **CAPT-05**: User gets a clear error and a non-zero exit code when the entry text is empty or whitespace-only, and nothing is written
+- [x] **CAPT-05**: User gets a clear error and a non-zero exit code when the entry text is empty or whitespace-only, and nothing is written
 - [ ] **CAPT-06**: After a successful write, user sees confirmation including the stored text and the file path it was written to
 
 ### Storage
@@ -90,11 +90,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAPT-01 | Phase 1 | Pending |
-| CAPT-02 | Phase 1 | Pending |
+| CAPT-01 | Phase 1 | Complete |
+| CAPT-02 | Phase 1 | Complete |
 | CAPT-03 | Phase 1 | Pending |
 | CAPT-04 | Phase 1 | Pending |
-| CAPT-05 | Phase 1 | Pending |
+| CAPT-05 | Phase 1 | Complete |
 | CAPT-06 | Phase 1 | Pending |
 | STOR-01 | Phase 1 | Pending |
 | STOR-02 | Phase 1 | Pending |
