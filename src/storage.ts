@@ -35,6 +35,22 @@ function lockAgeMs(lock: string): number {
   }
 }
 
+// Non-recursive rmdirSync only deletes an empty directory, so user content at the lock path is
+// never removed. Never throws: the entry is already on disk, and a reported failure would make
+// the user re-run and duplicate it.
+function releaseLock(lock: string): void {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      rmdirSync(lock);
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== 'EBUSY' && code !== 'EPERM') return;
+      sleepMs(LOCK_RETRY_MS);
+    }
+  }
+}
+
 export function dayLockPath(dir: string, date: string): string {
   return join(dir, '.' + dayFileName(date) + '.lock');
 }
@@ -119,13 +135,19 @@ export function appendEntry(dir: string, date: string, line: string): string {
         sleepMs(LOCK_RETRY_MS);
         continue;
       }
-      appendFirst(file, date, line);
+      // Stale lock or expired guard: save the entry best-effort, then clear the lock. Safe because
+      // the day file is now non-empty, so any waiter leaves through appendIfNonEmpty.
+      try {
+        appendFirst(file, date, line);
+      } finally {
+        releaseLock(lock);
+      }
       return file;
     }
     try {
       appendFirst(file, date, line);
     } finally {
-      rmdirSync(lock);
+      releaseLock(lock);
     }
     return file;
   }
