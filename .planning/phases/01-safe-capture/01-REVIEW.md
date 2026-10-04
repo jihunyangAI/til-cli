@@ -1,55 +1,50 @@
 ---
 phase: 01-safe-capture
-reviewed: 2026-10-04T00:00:00Z
+reviewed: 2026-10-05T00:00:00Z
 depth: standard
-files_reviewed: 26
+files_reviewed: 6
 files_reviewed_list:
-  - .gitattributes
-  - .github/workflows/test.yml
-  - .gitignore
-  - package.json
-  - scripts/stress.mjs
-  - scripts/test-install.mjs
-  - src/cli.ts
-  - src/config.ts
-  - src/core/args.ts
-  - src/core/format.ts
-  - src/run.ts
   - src/storage.ts
-  - test/args.test.ts
-  - test/cli.test.ts
-  - test/config.test.ts
-  - test/e2e.test.ts
-  - test/format.test.ts
-  - test/global-setup.ts
-  - test/helpers.ts
-  - test/run.test.ts
-  - test/static.test.ts
+  - scripts/stress.mjs
   - test/storage.test.ts
+  - test/static.test.ts
   - test/stress.test.ts
-  - tsconfig.json
-  - tsdown.config.ts
-  - vitest.config.ts
+  - .github/workflows/test.yml
 findings:
   critical: 0
-  warning: 4
-  info: 6
-  total: 10
+  warning: 3
+  info: 5
+  total: 8
 status: issues_found
 ---
 
-# Phase 01: Code Review Report
+# Phase 01: Code Review Report (incremental, plan 01-05)
 
-**Reviewed:** 2026-10-04
+**Reviewed:** 2026-10-05
 **Depth:** standard
-**Files Reviewed:** 26
+**Files Reviewed:** 6
 **Status:** issues_found
 
 ## Summary
 
-The append path (`src/storage.ts`) is sound for the stated threat model: `ax` create then `a+` fallback, a single write per entry, no read-modify-write, local-date components, LF-only UTF-8. I found no data-loss or overwrite path in the normal flow, and no security issues (no shell/eval/network, `TIL_DIR` is user-controlled by design). The first-of-day duplicate-heading race is the documented, accepted residual risk (D-10a/D-11) and is noted only as Info.
+Scope: gap-closure plan 01-05 (per-day mkdir lock, contended stress gate). The directory is not a git repository in this environment, so `git diff f2b8d65..HEAD` could not be run; the six files were reviewed in full against the 01-05 plan.
 
-The real defects are at the edges of the core value ("never corrupting what the user typed"). A mid-sentence `--` is silently deleted from the recorded text. Success output sits inside the try block that reports "Unsaved". `normalizeText` does not enforce the single-line invariant for all line-break characters. The stress test asserts an invariant the design explicitly does not guarantee.
+The locked happy path is sound. Traced interleavings:
+- creator vs. waiter on a 0-byte file;
+- waiter that saw ENOENT while the creator ran start to finish;
+- release followed by a late `mkdirSync`;
+- lock-free append past a held lock.
+
+None of them can produce a second heading or lose an entry. `ax` create plus one `writeAll`, and lock-free append only after `size > 0`, hold the invariant, and `rmdirSync` cannot remove user content.
+
+The weak spots are the paths that leave the lock:
+- The stale/expired takeover is not mutually exclusive, so it can still produce a duplicate heading. The code comment claims it is safe.
+- Lock release gives up silently after about 50 ms.
+- The stress test can pass vacuously with zero trials.
+
+No critical issues.
+
+The prior phase review items outside these files (WR-01..WR-03, IN-02..IN-05) are not re-evaluated here. Prior WR-04 (stress test asserting an unguaranteed invariant) and IN-01 (accepted duplicate-heading race) are resolved for the locked path by this plan. Their residual is WR-01 below.
 
 ## Structural Findings (fallow)
 
@@ -59,100 +54,99 @@ None provided.
 
 ## Warnings
 
-### WR-01: A `--` that is not the first argument is silently dropped from the recorded text
+### WR-01: Stale-lock / expired-guard takeover is not mutually exclusive, so two takers can still write two headings
 
-**File:** `src/core/args.ts:24-28`
-**Issue:** `collectText` treats the first `--` anywhere in argv as the end-of-options marker, discards it, and appends the remaining arguments. `til learned that -- ends options` records `learned that ends options`, with the `--` removed. Exit code 0 and the `Saved:` line show the already-altered text, and nothing signals the change. This is the fidelity guarantee in the Core Value ("never ... corrupting"), and the case is real for a developer note-taking tool (CLI flags, shell idioms). `test/args.test.ts:40` (`['words','--','--help']` -> `'words --help'`) encodes this behaviour as intended, so it is a design decision. I flag it because the loss is silent and unrecoverable (the user must notice the missing token themselves).
-**Fix:** Only honour `--` as the escape when it is the first argument (after an optional `add`). Anywhere else, keep it as ordinary text, or reject it as a usage error. For example:
+**File:** `src/storage.ts:134-146` (race inside `appendExisting` at `:66-78`)
+**Issue:** When the lock is at least 10 s old, or the 20 s guard has expired, every waiter that observes this runs `appendFirst` without holding anything. The comment at `:138-139` says this is safe "because the day file is now non-empty". That holds only after the first taker's write lands. The realistic trigger is a killed `til` that left a 0-byte day file (killed between `ax` and the write) plus a lock. Two later runs started close together:
+- W1 and W2 both see `lockAgeMs >= LOCK_STALE_MS`.
+- Both call `appendFirst`. W1's `ax` creates the file or hits EEXIST, and W2 hits EEXIST.
+- Both reach `appendExisting`, and both `fstat` size 0 before either `writeAll` runs.
+- Both write `dayHeading + line`, giving two `# date` headings.
+
+The `fstat` to `write` gap in `appendExisting` is not atomic. The same thing happens when the 20 s deadline expires for several waiters at once behind a very slow live holder. A waiter whose guard expired also runs `releaseLock` on a lock it does not own, removing a live holder's lock. That is harmless only while the file is non-empty. No test covers concurrent stale takers, so the "closed except two documented fallbacks" claim is unproven for N greater than 1.
+
+**Fix:** Make the takeover re-contend through the same atomic step instead of writing unlocked. For example, on a stale lock:
 ```ts
-function collectText(args: readonly string[]): Command {
-  let rest = args;
-  if (rest[0] === '--') rest = rest.slice(1);        // escape only in leading position
-  const words: string[] = [];
-  for (const arg of rest) { /* option check only before first text word, or keep -x strictness */ }
+if (stale || Date.now() >= deadline) {
+  try { rmdirSync(lock); } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') { appendFirst(file, date, line); return file; } // cannot clear: documented best effort
+  }
+  if (Date.now() < hardDeadline) continue; // loop back to mkdirSync(lock): only one process wins
 }
 ```
-If mid-argv `--` must stay an escape, at minimum print a notice on stderr that the token was consumed.
+This cuts the multi-taker window from the whole `appendFirst` duration down to the rmdir-to-mkdir gap. A re-stat of the lock's mtime immediately before `rmdirSync` narrows it further. If a literal best-effort fallback is kept, say plainly in the comment that it can duplicate the heading when several processes take over together. Add a test with several concurrent stale takers (worker threads) over a 0-byte file.
 
-### WR-02: Success output is inside the `try` that reports "could not save entry / Unsaved"
+### WR-02: Stress test passes vacuously when `TIL_STRESS_TRIALS` is not a positive integer
 
-**File:** `src/run.ts:55-69`
-**Issue:** `deps.out('Saved: ...')` is executed inside the same `try` as `appendEntry`. If the output write throws after the entry is already on disk (closed/broken stdout, a pipe closed by the consumer, a throwing injected `out`), the catch prints `could not save entry` plus `Unsaved: <line>` and returns 1 for an entry that was saved. The user retries and the entry is duplicated, which violates "never corrupt entries" and misleads the user. `process.stdout` write errors on pipes can also surface as an unhandled async `error` event (EPIPE), which `cli.ts` does not handle, so a successful save can end with a stack trace and a non-zero exit code.
-**Fix:** Narrow the try to the write only:
-```ts
-let file: string;
-try {
-  file = appendEntry(resolveDir(deps.env, deps.homedir(), deps.cwd()), date, line);
-} catch (e) {
-  deps.err(/* unsaved report */);
-  return 1;
-}
-deps.out('Saved: ' + line.trimEnd() + '\nFile: ' + file + '\n');
-return 0;
-```
-In `realDeps`, also attach `process.stdout.on('error', () => {})` so an EPIPE after a successful save cannot change the outcome.
-
-### WR-03: `normalizeText` does not guarantee a single line for all Unicode line separators
-
-**File:** `src/core/format.ts:14`
-**Issue:** `/\s+/` covers CR, LF, U+2028 and U+2029, but not U+0085 (NEL) or the C0 separators U+001C-U+001F. Python `str.splitlines()`, some editors and pagers, and `grep`/viewers built on them treat those as line breaks, so the one-line `- HH:MM text` item can be split in the user's archive. Other control characters (ESC U+001B, BEL, DEL) are also stored verbatim and echoed in `Saved:`, so pasted terminal escape sequences are written to the file and replayed to the terminal. `test/run.test.ts:97` and `test/format.test.ts:72` deliberately pin only U+3000/U+00A0 collapsing and U+200B preservation; the control-character cases are untested.
+**File:** `test/stress.test.ts:8, 11, 68, 90`
+**Issue:** `Number(process.env.TIL_STRESS_TRIALS ?? '1')` is `NaN` for `abc`, `0` for `''` or `'0'`, and fractional or negative values are accepted. `for (let n = 0; n < TRIALS; n++)` then runs zero iterations and both tests pass with no processes spawned. `scripts/stress.mjs` validates the value, but `npx vitest run test/stress.test.ts` directly (or a CI env typo) bypasses it. `Math.max(120000, NaN)` is also `NaN`, which is an undefined timeout. The plan's own T-01-22 says a green gate must mean the race was exercised. Zero trials is the opposite.
 **Fix:**
 ```ts
-export function normalizeText(s: string): string {
-  return s
-    .replace(/[\u0000-\u0008\u000e-\u001f\u007f\u0085]/g, ' ') // keep \t\n\v\f\r for \s below
-    .replace(/\s+/g, ' ')
-    .trim();
+const TRIALS = Number(process.env.TIL_STRESS_TRIALS ?? '1');
+if (!Number.isInteger(TRIALS) || TRIALS < 1) {
+  throw new Error(`TIL_STRESS_TRIALS must be an integer >= 1, got "${process.env.TIL_STRESS_TRIALS}"`);
 }
 ```
-Add test rows for U+0085, U+001C and U+001B.
 
-### WR-04: The stress test asserts an invariant the design documents as not guaranteed (latent flake)
+### WR-03: `releaseLock` gives up silently after about 50 ms and ignores EACCES, leaving litter and flaking the readdir gate on Windows
 
-**File:** `test/stress.test.ts:57` (also `:39-45`, `:62`)
-**Issue:** `checkCommon` requires exactly one `# ` heading from 20 simultaneous first-of-day writers. D-10a/D-11 state the worst case is a cosmetic duplicate heading: process A creates the file with `ax` (size 0), process B then sees `size === 0` in `appendExisting` and writes its own heading before A's write lands. The window is tiny, but the test is the Phase 1 "gate" and runs 10x in `test:stress` and in CI on two OSes. A rare red run will look like data corruption when it is the accepted race. Separately, `trial` returns `{ dir, date: before }` after the second midnight straddle (`attempt >= 1`), which then fails an unrelated assertion.
-**Fix:** Either assert the real guarantee (every entry appears exactly once, `# <date>` appears at least once and the first line is the heading, no other heading text) and report duplicates as a soft warning, or fix the race for real (see IN-01). Make the second-straddle case skip, not fail.
+**File:** `src/storage.ts:41-52` (consumed by `test/stress.test.ts:52`)
+**Issue:** The retry budget is 10 x 5 ms and covers only EBUSY and EPERM. On Windows, an AV scanner or indexer holding the directory, or a read-only/delete-pending state, commonly surfaces as EACCES as well, and CPU starvation under the 2-CPU pin makes a 50 ms wall-clock budget small. When release fails:
+- The empty `.YYYY-MM-DD.md.lock` directory stays in the user's archive directory, permanently and silently.
+- `checkCommon`'s `readdirSync(dir) === [day.md]` assertion fails. That looks like a duplicate-heading regression but is a lock-hygiene flake, and it is the main source of false red on the contended Windows jobs.
+
+The leftover is not a correctness problem for that day, because the file is non-empty and never needs the lock again. It is still litter, with no signal to the user.
+**Fix:** Retry EACCES too, and bound by elapsed time rather than attempt count (for example about 500 ms). Optionally make `stress.test.ts` tolerate leftover empty lock directories and assert them separately, so the heading assertion stays the signal:
+```ts
+if (code !== 'EBUSY' && code !== 'EPERM' && code !== 'EACCES') return;
+```
 
 ## Info
 
-### IN-01: First-of-day duplicate heading race (accepted, D-10a/D-11)
+### IN-01: Fallback for any non-EEXIST `mkdirSync` error bypasses the lock, including transient Windows delete-pending EPERM
 
-**File:** `src/storage.ts:12-28, 30-46`
-**Issue:** The `size === 0` check in `appendExisting` is separated from `ax` creation by a window in which a concurrent creator has produced a 0-byte file. Result is a second `# date` heading, never data loss. Documented and accepted; listed for completeness only.
-**Fix:** None required. If it ever needs closing, have the creator write the heading before any other process can observe an empty file (for example create the file with the heading plus first line in one atomic step, which `ax` + single write already approximates), or drop the `size === 0` heading branch for files that already exist and rely on `ax` for the heading.
+**File:** `src/storage.ts:130-133`
+**Issue:** Any mkdir error other than EEXIST goes straight to an unlocked `appendFirst`. On Windows a lock directory whose delete is pending returns EPERM/EACCES to `mkdirSync`. That is only safe if the releasing holder had already written. It holds except when that holder's write failed (for example ENOSPC after `ax` left a 0-byte file), which leaves two unlocked writers with the same duplicate-heading window as WR-01. The case is very narrow, but cheap to close.
+**Fix:** Treat EPERM/EACCES/EBUSY as "lock busy" for a bounded number of short retries before falling back (same loop as EEXIST, capped), so the lock stays authoritative on Windows.
 
-### IN-02: Partial write / no durability handling in `writeAll`
+### IN-02: Untested and unguarded lock paths
 
-**File:** `src/storage.ts:5-10`
-**Issue:** `writeAll` loops until `off` reaches `buf.length` but has no guard if `writeSync` returns 0 (would spin forever). If it throws mid-entry (ENOSPC), a partial line stays on disk while the CLI prints "Unsaved:", so a retry duplicates a fragment. The next append does prefix `\n`, so structure survives. There is no `fsync` before `closeSync`, so an OS crash or power loss right after `Saved:` can lose the entry.
-**Fix:** Throw if `writeSync` returns 0; consider `fsyncSync(fd)` before close (cost is small for a one-line append).
+**File:** `test/storage.test.ts:135-215`, `test/static.test.ts:24-42`
+**Issue:** There are no tests for:
+- the 20 s deadline fallback;
+- the non-EEXIST mkdir fallback;
+- `releaseLock` retry or failure;
+- concurrent stale takers;
+- a user file at the lock path (T-01-21).
 
-### IN-03: `TIL_DIR` is trimmed for the blank test but used untrimmed otherwise
+The plan's prohibition "never delete recursively or unlink" is `verification: review` only. Nothing in the static ban list would catch a later `rmSync(..., { recursive: true })` or `unlinkSync` in `src/storage.ts`.
+**Fix:** Add a static ban such as `/\brmSync\b|\bunlinkSync\b|rmdirSync\([^)]*recursive/` (the existing `mkdirSync(dir, { recursive: true })` must stay allowed), and a storage test that places a regular file at the lock path, backdates it, and asserts the entry is saved and the file is left intact.
 
-**File:** `src/config.ts:9-12`
-**Issue:** `'   '` falls back to the default, but `' ~/notes '` or `' /data '` is used verbatim, creating a directory with leading/trailing spaces. Inconsistent and surprising (Windows strips trailing spaces silently).
-**Fix:** Use `const raw = env.TIL_DIR?.trim()` and test `!raw`.
+### IN-03: A crashed holder makes the next first-of-day `til` hang silently for up to 10 s
 
-### IN-04: Invisible literal characters in test sources
+**File:** `src/storage.ts:15, 134-137`
+**Issue:** The age is measured from the lock's creation. A run within 10 s of the crash (a user re-running right after Ctrl-C, or a CI retry) blocks with no output, up to 20 s in the worst case. This conflicts with the project's "faster than opening an editor" constraint. The wait has no stderr hint, and the user will likely Ctrl-C again and produce another stale lock.
+**Fix:** Print a one-line stderr notice after about 1 s of waiting, for example "til: waiting for a previous write to finish". This needs a passed-in notice callback, because `storage.ts` must not use `console`.
 
-**File:** `test/run.test.ts:100`, `test/format.test.ts:73-75`
-**Issue:** The tests embed literal U+3000, U+00A0 and U+200B characters in string literals. They are invisible in review and editors, and normalizing tools can silently change them, turning the tests into no-ops (the injection scanner also flags them). `test/args.test.ts` and `test/run.test.ts:85` already use `　`-style escapes elsewhere.
-**Fix:** Replace with escapes such as `'a　b'`, `'a b'` and `'​'`.
+### IN-04: `scripts/stress.mjs` pinning edge cases and misleading header
 
-### IN-05: `scripts/test-install.mjs` robustness
+**File:** `scripts/stress.mjs:32-33, 46, 41-43`
+**Issue:**
+- `((1 << n) - 1)` overflows for n >= 31 (wrong or zero mask at 32). `TIL_STRESS_CPUS` of 31 or more on a machine with that many cores gives an invalid or wrong affinity.
+- On platforms other than win32 and linux (macOS), the default silently runs unpinned and prints "pinned to 0 CPU(s) via unpinned". That is a contradictory header, and a green run there is not contended evidence.
+- On Linux, if the allowed CPU set excludes CPUs 0-1 (cpuset-restricted container), `taskset -c 0-1` fails with a generic error instead of a clear message.
 
-**File:** `scripts/test-install.mjs:64, 194`
-**Issue:** `packOut.slice(packOut.search(/^\[\s*$/m))` yields the last character when no match is found (`search` returns -1), so a changed npm output format fails with an opaque `JSON.parse` error. `rmSync` in `finally` can throw (EBUSY on Windows, locked temp dirs) and mask or flip the real result.
-**Fix:** Check `idx >= 0` and throw a clear message. Wrap cleanup in try/catch and warn.
+**Fix:** Use `((1n << BigInt(n)) - 1n).toString(16)` and clamp n to 64. Print `unpinned (no pinning support on <platform>)`, and optionally exit non-zero on non-pinnable platforms unless `TIL_STRESS_CPUS=0` is explicit.
 
-### IN-06: CI does not exercise the Windows shim matrix
+### IN-05: Workflow budget and duplicate triggers
 
-**File:** `.github/workflows/test.yml:24-28`
-**Issue:** The only test of the real user path (`til.ps1`/`til.cmd`/Git Bash) is `npm run test:install`, which exits 0 as "skipped" on non-Windows and is not run anywhere in the workflow, including `windows-latest`. Also `on: push` plus `on: pull_request` runs every PR branch push twice.
-**Fix:** Add `- run: npm run test:install` gated on `runner.os == 'Windows'`; restrict `push` to the default branch.
+**File:** `.github/workflows/test.yml:3-5, 12`
+**Issue:** The stress step is 2 scenarios x 40 trials x 20 processes pinned to 2 CPUs. Planning-time measurements on a loaded machine ranged 148-548 s per run, and the per-test timeout allows 600 s each. Worst case (about 20 min for the stress step plus `npm ci` and `npm test`) is tight against `timeout-minutes: 30`, and a timeout will read as a failure of the gate. `on: push` together with `on: pull_request` also runs all four jobs twice per PR push (prior review IN-06, still open).
+**Fix:** Raise the job timeout to 45 minutes, or lower the CI trial count while keeping the 2-CPU pinning. Restrict `push` to the default branch.
 
 ---
 
-_Reviewed: 2026-10-04_
+_Reviewed: 2026-10-05_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
