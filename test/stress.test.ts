@@ -7,6 +7,8 @@ import { CLI, tempDir } from './helpers.ts';
 
 const TRIALS = Number(process.env.TIL_STRESS_TRIALS ?? '1');
 const PROCS = 20;
+// Contended runs (2 CPUs, many trials) are slow; scale the per-test budget with the trial count.
+const TEST_TIMEOUT_MS = Math.max(120000, TRIALS * 15000);
 
 interface Child {
   code: number | null;
@@ -79,7 +81,7 @@ describe(`STOR-06: ${PROCS} parallel processes (${TRIALS} trial(s))`, () => {
         });
       }
     },
-    120000,
+    TEST_TIMEOUT_MS,
   );
 
   it(
@@ -92,6 +94,6 @@ describe(`STOR-06: ${PROCS} parallel processes (${TRIALS} trial(s))`, () => {
         for (const l of entries) expect(l).toMatch(/^- \d\d:\d\d same 한글$/);
       }
     },
-    120000,
+    TEST_TIMEOUT_MS,
   );
 });
