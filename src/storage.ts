@@ -14,6 +14,7 @@ import { dayFileName, dayHeading } from './core/format.ts';
 
 const LOCK_STALE_MS = 10000;
 const LOCK_RETRY_MS = 5;
+const LOCK_RELEASE_BUDGET_MS = 500;
 
 function writeAll(fd: number, buf: Buffer): void {
   let off = 0;
@@ -36,16 +37,20 @@ function lockAgeMs(lock: string): number {
 }
 
 // Non-recursive rmdirSync only deletes an empty directory, so user content at the lock path is
-// never removed. Never throws: the entry is already on disk, and a reported failure would make
-// the user re-run and duplicate it.
+// never removed. Windows reports a directory held by an antivirus scan, an indexer or a pending
+// delete as EBUSY, EPERM or EACCES, so those are retried within a time budget (a count budget is
+// too small when the CPU is starved). Never throws: the entry is already on disk, and a reported
+// failure would make the user re-run and duplicate it.
 function releaseLock(lock: string): void {
-  for (let attempt = 0; attempt < 10; attempt++) {
+  const giveUpAt = Date.now() + LOCK_RELEASE_BUDGET_MS;
+  for (;;) {
     try {
       rmdirSync(lock);
       return;
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
-      if (code !== 'EBUSY' && code !== 'EPERM') return;
+      if (code !== 'EBUSY' && code !== 'EPERM' && code !== 'EACCES') return;
+      if (Date.now() >= giveUpAt) return;
       sleepMs(LOCK_RETRY_MS);
     }
   }
