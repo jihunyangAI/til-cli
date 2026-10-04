@@ -6,6 +6,13 @@ import { localDate } from '../src/core/format.ts';
 import { CLI, tempDir } from './helpers.ts';
 
 const TRIALS = Number(process.env.TIL_STRESS_TRIALS ?? '1');
+// A zero, negative, fractional or non-numeric count would run no trials and pass vacuously, so a
+// green gate would no longer mean the race was exercised (T-01-22). Fail loudly instead.
+if (!Number.isInteger(TRIALS) || TRIALS < 1) {
+  throw new Error(
+    `TIL_STRESS_TRIALS must be an integer >= 1, got "${process.env.TIL_STRESS_TRIALS}"`,
+  );
+}
 const PROCS = 20;
 // Contended runs (2 CPUs, many trials) are slow; scale the per-test budget with the trial count.
 const TEST_TIMEOUT_MS = Math.max(120000, TRIALS * 15000);
