@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 01-safe-capture
 source: [01-VERIFICATION.md]
 started: 2026-10-04T14:20:00Z
-updated: 2026-10-04T14:51:54Z
+updated: 2026-10-04T15:33:06Z
 ---
 
 ## Current Test
@@ -47,5 +47,15 @@ blocked: 0
   reason: "User reported: CI run 37210646435 - test (windows-latest, 24) failed npm run test:stress; 20 parallel processes produced two '# 2026-10-04' headings in one day file (test/stress.test.ts:57). windows-22 and both ubuntu jobs passed."
   severity: major
   test: 2
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "Check-then-act race in src/storage.ts: appendEntry creates the day file with openSync(file,'ax') and only later writes dayHeading+entry in a separate writeSync, leaving a visible 0-byte window; losers (EEXIST) go to appendExisting, whose fstat size===0 branch (added in 01-03 for touched/crash-left empty files) writes a second heading when it lands in that window. Fires under CPU contention (preempted creator); entries are never lost. Previously accepted as residual risk (01-RESEARCH.md:285, 01-03-SUMMARY Residual Risk); D-11 gate failure requires re-plan."
+  artifacts:
+    - path: "src/storage.ts"
+      issue: "appendEntry: file create ('ax') and heading+entry write are not atomic (visible 0-byte window)"
+    - path: "src/storage.ts"
+      issue: "appendExisting: size===0 => write heading cannot distinguish truly empty file from creator's transient 0-byte state"
+    - path: "test/stress.test.ts"
+      issue: "No defect, but only exercises the race under CPU contention; idle local runs give false confidence"
+  missing:
+    - "Heading decision must not depend on a possibly-transient 0-byte state (e.g. atomic create-with-content via temp file + linkSync(tmp, file) EEXIST-safe without violating D-10, or bounded re-check in appendExisting, or exclusive lock)"
+    - "Stress gate must add CPU contention on Windows (e.g. CPU affinity pinning or more trials) so the race is actually exercised"
+  debug_session: ".planning/debug/duplicate-day-heading-concurrent.md"
