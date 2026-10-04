@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Safe Capture
-status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-10-03T17:27:08.489Z"
+status: verifying
+stopped_at: Completed-01-04-PLAN.md
+last_updated: "2026-10-04T14:07:31.411Z"
 last_activity: 2026-10-04
 last_activity_desc: Phase 01 execution started
-state_head: 0aef7e48546606da1345f4025807710aea2f8562
+state_head: e15461f8965aae2baa25367b40fac2f20a151375
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 
 Phase: 01 (Safe Capture) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-04 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P01 | 8 min | 2 tasks | 16 files |
 | Phase 01 P02 | 3 min | 2 tasks | 4 files |
 | Phase 01 P03 | 10 min | 3 tasks | 9 files |
+| Phase 01 P04 | 12min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,7 @@ Recent decisions affecting current work:
 - [Phase 01]: Reserved words (add/show/list/help) match only as the exact case-sensitive first argument; dash-prefixed args >1 char before -- are options even with spaces (D-23); usage errors always carry the PowerShell-safe til '--' hint (D-18)
 - [Phase 01]: 01-03: appendExisting probes last byte via one readSync on the 'a+' fd; no directory pre-check so collisions surface as D-12 errors
 - [Phase 01]: 01-03: stress gate passed unchanged; 'ax' creator 0-byte window recorded as residual risk, no retry/lock added
+- [Phase 01]: 01-04: global til installed via npm install then npm install -g . from main checkout (symlink to repo); actions pinned @v7; PowerShell needs til '--' <text>
 
 ### Pending Todos
 
@@ -96,6 +98,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T17:27:08.459Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-10-04T14:07:28.305Z
+Stopped at: Completed-01-04-PLAN.md
 Resume file: None

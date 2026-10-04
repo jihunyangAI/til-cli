@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. `til -- -text` and `til add show me` record their text literally instead of treating it as a flag or subcommand. `til --help` and `til --version` respond.
   5. Empty or whitespace-only input gives a clear error and a non-zero exit code, and writes nothing. A failed write (e.g. an unwritable storage directory) prints an error on stderr that includes the unsaved text, and exits non-zero.
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -45,7 +45,7 @@ Plans:
 - [x] 01-03-PLAN.md — Write safety: hand-edited/empty-file repair, local-date and midnight proofs, failure path, 20-process stress gate (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 01-04-PLAN.md — Distribution: PowerShell 5.1/cmd/Git Bash shim matrix, windows+ubuntu CI file, global install, end-of-phase fresh-window check (wave 3)
+- [x] 01-04-PLAN.md — Distribution: PowerShell 5.1/cmd/Git Bash shim matrix, windows+ubuntu CI file, global install, end-of-phase fresh-window check (wave 3)
 
 **Notes for planning:**
 - Open grammar decision for discuss-phase: what bare `til` with no arguments does (print today's entries or print help). CAPT-05 only covers empty or whitespace text.
@@ -80,5 +80,5 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Safe Capture | 3/4 | In Progress|  |
+| 1. Safe Capture | 4/4 | In Progress|  |
 | 2. Read Back & README | 0/TBD | Not started | - |
