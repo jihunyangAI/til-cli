@@ -1,5 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { once } from 'node:events';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { isAbsolute, join } from 'node:path';
+import { Worker } from 'node:worker_threads';
 import { describe, expect, it } from 'vitest';
 import { appendEntry } from '../src/storage.ts';
 import { tempDir } from './helpers.ts';
@@ -21,12 +30,14 @@ describe('appendEntry start-state table', () => {
     const dir = tempDir();
     const file = appendEntry(dir, D, L);
     expect(readFileSync(file)).toEqual(Buffer.from(HEADING + L, 'utf8'));
+    expect(readdirSync(dir)).toEqual([`${D}.md`]);
   });
 
   it('0-byte file gets heading + entry (STOR-01)', () => {
     const { dir, file } = seed(Buffer.alloc(0));
     appendEntry(dir, D, L);
     expect(readFileSync(file)).toEqual(Buffer.from(HEADING + L, 'utf8'));
+    expect(readdirSync(dir)).toEqual([`${D}.md`]);
   });
 
   it('file ending in LF gets the entry only', () => {
@@ -116,5 +127,34 @@ describe('appendEntry ordering and paths', () => {
     mkdirSync(collision);
     expect(() => appendEntry(dir, D, L)).toThrow();
     expect(statSync(collision).isDirectory()).toBe(true);
+    expect(readdirSync(dir)).toEqual([`${D}.md`]);
+  });
+});
+
+describe('per-day lock (G-01-2)', () => {
+  it('a writer that finds a 0-byte file under a held lock waits and appends below the holder heading', async () => {
+    const dir = tempDir();
+    const file = join(dir, `${D}.md`);
+    const lock = join(dir, `.${D}.md.lock`);
+    // State of a creator between its create and its write: lock held, day file at 0 bytes.
+    mkdirSync(lock);
+    writeFileSync(file, Buffer.alloc(0));
+    const source = [
+      "const { appendFileSync, rmdirSync } = require('node:fs');",
+      "const { workerData } = require('node:worker_threads');",
+      'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);',
+      'appendFileSync(workerData.file, workerData.content);',
+      'rmdirSync(workerData.lock);',
+    ].join('\n');
+    const holder = HEADING + '- 09:00 creator\n';
+    const worker = new Worker(source, {
+      eval: true,
+      workerData: { file, lock, content: holder },
+    });
+    appendEntry(dir, D, L);
+    const [code] = (await once(worker, 'exit')) as [number];
+    expect(code).toBe(0);
+    expect(readFileSync(file)).toEqual(Buffer.from(holder + L, 'utf8'));
+    expect(readdirSync(dir)).toEqual([`${D}.md`]);
   });
 });
