@@ -10,7 +10,7 @@ import {
 import { isAbsolute, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { describe, expect, it } from 'vitest';
-import { appendEntry } from '../src/storage.ts';
+import { appendEntry, dayLockPath } from '../src/storage.ts';
 import { tempDir } from './helpers.ts';
 
 const D = '2026-10-04';
@@ -132,10 +132,14 @@ describe('appendEntry ordering and paths', () => {
 });
 
 describe('per-day lock (G-01-2)', () => {
+  it('dayLockPath is a dot-prefixed sibling of the day file', () => {
+    expect(dayLockPath('x', D)).toBe(join('x', `.${D}.md.lock`));
+  });
+
   it('a writer that finds a 0-byte file under a held lock waits and appends below the holder heading', async () => {
     const dir = tempDir();
     const file = join(dir, `${D}.md`);
-    const lock = join(dir, `.${D}.md.lock`);
+    const lock = dayLockPath(dir, D);
     // State of a creator between its create and its write: lock held, day file at 0 bytes.
     mkdirSync(lock);
     writeFileSync(file, Buffer.alloc(0));

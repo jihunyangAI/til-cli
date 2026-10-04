@@ -30,7 +30,7 @@ const BANNED: Array<[string, RegExp]> = [
   ['process.exit (D-14)', /process\.exit\(/],
   ['truncating or non-append open flag (D-10)', /['"]w\+?['"]/],
   ['exclusive write open flag (D-10)', /['"]wx\+?['"]/],
-  ['temp/lock/rename file writes (D-10, privacy)', /rename|tmpdir|mkdtemp|\.lock\b/],
+  ['temp-file, rename or link writes (D-10, privacy)', /rename|tmpdir|mkdtemp|linkSync|copyFile/],
   ['console output outside Deps (D-14)', /console\./],
   [
     'network or process-spawn module (privacy, T-01-02)',
