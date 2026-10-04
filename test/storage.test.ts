@@ -5,6 +5,7 @@ import {
   readdirSync,
   readFileSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
@@ -160,5 +161,55 @@ describe('per-day lock (G-01-2)', () => {
     expect(code).toBe(0);
     expect(readFileSync(file)).toEqual(Buffer.from(holder + L, 'utf8'));
     expect(readdirSync(dir)).toEqual([`${D}.md`]);
+  });
+
+  function staleLock(dir: string): string {
+    const lock = dayLockPath(dir, D);
+    mkdirSync(lock);
+    const past = new Date(Date.now() - 60000);
+    utimesSync(lock, past, past);
+    return lock;
+  }
+
+  it('a stale lock with a missing file is recovered: entry saved at once, lock removed', () => {
+    const dir = tempDir();
+    staleLock(dir);
+    const t0 = Date.now();
+    const file = appendEntry(dir, D, L);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(readFileSync(file)).toEqual(Buffer.from(HEADING + L, 'utf8'));
+    expect(readdirSync(dir)).toEqual([`${D}.md`]);
+  });
+
+  it('a stale lock with a 0-byte file is recovered: heading + entry, lock removed', () => {
+    const { dir, file } = seed(Buffer.alloc(0));
+    staleLock(dir);
+    const t0 = Date.now();
+    appendEntry(dir, D, L);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(readFileSync(file)).toEqual(Buffer.from(HEADING + L, 'utf8'));
+    expect(readdirSync(dir)).toEqual([`${D}.md`]);
+  });
+
+  it('a fresh foreign lock does not delay or get touched when the day file has content', () => {
+    const old = Buffer.from(HEADING + '- 08:00 a\n', 'utf8');
+    const { dir, file } = seed(old);
+    const lock = dayLockPath(dir, D);
+    mkdirSync(lock);
+    const t0 = Date.now();
+    appendEntry(dir, D, L);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(readFileSync(file)).toEqual(Buffer.concat([old, Buffer.from(L)]));
+    expect(statSync(lock).isDirectory()).toBe(true);
+  });
+
+  it('a fresh foreign lock and no final LF: LF repair in the same write, lock untouched', () => {
+    const old = Buffer.from(HEADING + '- 08:00 a', 'utf8');
+    const { dir, file } = seed(old);
+    const lock = dayLockPath(dir, D);
+    mkdirSync(lock);
+    appendEntry(dir, D, L);
+    expect(readFileSync(file)).toEqual(Buffer.concat([old, LF, Buffer.from(L)]));
+    expect(statSync(lock).isDirectory()).toBe(true);
   });
 });
