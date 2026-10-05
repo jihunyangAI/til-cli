@@ -38,9 +38,11 @@ describe('releaseLock retry (WR-03)', () => {
     it(`retries ${code} past the old 10-attempt budget and removes the lock`, () => {
       const dir = tempDir();
       fault.code = code;
-      fault.failures = 25;
+      // 11 failures: past the old 10-attempt budget, but well inside the 500 ms time budget even
+      // with ~15.6 ms Windows timer granularity under load (25 failures could exceed it).
+      fault.failures = 11;
       const file = appendEntry(dir, D, L);
-      expect(fault.calls).toBe(26);
+      expect(fault.calls).toBe(12);
       expect(readFileSync(file, 'utf8')).toBe('# 2026-10-04\n\n' + L);
       expect(existsSync(dayLockPath(dir, D))).toBe(false);
       expect(readdirSync(dir)).toEqual([`${D}.md`]);
