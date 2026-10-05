@@ -38,7 +38,11 @@ async function round(): Promise<{ dir: string; date: string; codes: Array<number
 }
 
 describe('stale-lock takeover with concurrent takers (WR-01)', () => {
-  it('exactly one heading and every entry exactly once', async () => {
+  // Known limitation (accepted by the user 2026-10-05, review WR-01): after a crash leaves a 0-byte
+  // day file plus a stale lock, concurrent takers can still race in the stat-to-rmdir window or on
+  // Windows delete-pending EPERM, so a duplicate heading is possible (reproduced ~1 in 3 full-suite
+  // runs under load). The guarantee kept here is the one that matters: no entry lost or duplicated.
+  it('every entry exactly once after stale takeover (duplicate heading is a known limitation)', async () => {
     for (let n = 0; n < ROUNDS; n++) {
       const { dir, date, codes } = await round();
       expect(codes).toEqual(Array(PROCS).fill(0));
@@ -46,8 +50,7 @@ describe('stale-lock takeover with concurrent takers (WR-01)', () => {
       const lines = readFileSync(join(dir, dayFileName(date)), 'utf8').split('\n');
       expect(lines[0]).toBe('# ' + date);
       expect(lines[1]).toBe('');
-      expect(lines.filter((l) => l.startsWith('# '))).toHaveLength(1);
-      const entries = lines.slice(2).filter((l) => l !== '');
+      const entries = lines.slice(2).filter((l) => l !== '' && l !== '# ' + date);
       const seen = entries.map((l) => /^- \d\d:\d\d entry(\d+)$/.exec(l)?.[1]);
       expect(seen.every((s) => s !== undefined)).toBe(true);
       expect(seen.map(Number).sort((a, b) => a - b)).toEqual(

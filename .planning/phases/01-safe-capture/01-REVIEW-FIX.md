@@ -6,7 +6,8 @@ iteration: 1
 findings_in_scope: 3
 fixed: 3
 skipped: 0
-status: all_fixed
+status: partial
+known_limitations: [WR-01]
 ---
 
 # Phase 01: Code Review Fix Report
@@ -60,3 +61,17 @@ Edits, commits and gates all ran in the main checkout (no isolated worktree), be
 _Fixed: 2026-10-05_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+
+## Known Limitation — WR-01 (recorded 2026-10-05)
+
+Post-fix verification reproduced a duplicate heading in `test/stale-takeover.test.ts` in about 1 of 3
+full `npm test` runs on Windows under load. Scope: only after a crashed `til` leaves a 0-byte day
+file plus a stale lock AND several `til` runs start concurrently. Likely causes: the documented
+stat-to-rmdir window, and Windows delete-pending EPERM on mkdir/rmdir falling through to the unlocked
+best-effort path. Entries are never lost or duplicated. The normal concurrent first-write path
+(G-01-2) is unaffected and CI-green.
+
+User decision: accept as a known limitation. The test now asserts every entry exactly once; the
+single-heading assertion was dropped for this crash-recovery scenario only. A full fix likely needs
+revisiting D-10 (e.g. an idempotent heading write at offset 0).
