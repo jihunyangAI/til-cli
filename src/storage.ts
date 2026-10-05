@@ -27,12 +27,12 @@ function sleepMs(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-function lockAgeMs(lock: string): number {
+// mtime of the lock directory, or null when it cannot be read (it was just released, or stat fails).
+function lockMtimeMs(lock: string): number | null {
   try {
-    return Date.now() - statSync(lock).mtimeMs;
+    return statSync(lock).mtimeMs;
   } catch {
-    // ENOENT means the holder just released; treat as fresh and let the next pass re-check.
-    return 0;
+    return null;
   }
 }
 
@@ -120,13 +120,21 @@ function appendFirst(file: string, date: string, line: string): void {
 
 // Invariant: every heading write happens in appendFirst, and appendFirst runs only while holding
 // the per-day lock (an empty directory made with mkdirSync) or in the two documented fallbacks
-// (stale lock / expired guard, lock directory not creatable). Writers outside the lock write only
+// (lock directory not creatable, lock cannot be cleared). Writers outside the lock write only
 // after they see a size above 0, and append-only keeps that true (D-10, D-11).
+//
+// A stale lock (at least LOCK_STALE_MS old) or one that has blocked this writer for twice that is
+// never used as permission to write. It is removed and the loop goes back to mkdirSync, which
+// picks exactly one winner among all contenders. A lock is removed only if its mtime still equals
+// the one this writer waited on, so a fresh lock that another taker just made is left alone. The
+// residual window is the stat-to-rmdir gap of a taker that stalls there while a rival completes
+// remove-and-create; the day file is non-empty after the first write, which closes it from then on.
 export function appendEntry(dir: string, date: string, line: string): string {
   mkdirSync(dir, { recursive: true });
   const file = join(dir, dayFileName(date));
   const lock = dayLockPath(dir, date);
-  const deadline = Date.now() + 2 * LOCK_STALE_MS;
+  let waitedOn: number | null = null;
+  let deadline = Date.now() + 2 * LOCK_STALE_MS;
   for (;;) {
     if (appendIfNonEmpty(file, line)) return file;
     try {
@@ -136,18 +144,41 @@ export function appendEntry(dir: string, date: string, line: string): string {
         appendFirst(file, date, line);
         return file;
       }
-      if (lockAgeMs(lock) < LOCK_STALE_MS && Date.now() < deadline) {
+      const mtime = lockMtimeMs(lock);
+      if (mtime !== null && mtime !== waitedOn) {
+        // A different lock instance: its holder is making progress, so restart the wait guard.
+        waitedOn = mtime;
+        deadline = Date.now() + 2 * LOCK_STALE_MS;
+      }
+      const expired = Date.now() >= deadline;
+      if (mtime === null) {
+        if (expired) {
+          // The lock can neither be read nor created: documented best effort. It is not ours, so
+          // it is not released.
+          appendFirst(file, date, line);
+          return file;
+        }
         sleepMs(LOCK_RETRY_MS);
         continue;
       }
-      // Stale lock or expired guard: save the entry best-effort, then clear the lock. Safe because
-      // the day file is now non-empty, so any waiter leaves through appendIfNonEmpty.
-      try {
-        appendFirst(file, date, line);
-      } finally {
-        releaseLock(lock);
+      if (Date.now() - mtime < LOCK_STALE_MS && !expired) {
+        sleepMs(LOCK_RETRY_MS);
+        continue;
       }
-      return file;
+      if (lockMtimeMs(lock) === mtime) {
+        try {
+          rmdirSync(lock);
+        } catch (err) {
+          // ENOENT with the path still present means it is not a directory we can remove.
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT' || lockMtimeMs(lock) !== null) {
+            // Not an empty directory we may remove (user content, permissions): documented best
+            // effort. The lock is not ours, so it is left alone.
+            appendFirst(file, date, line);
+            return file;
+          }
+        }
+      }
+      continue;
     }
     try {
       appendFirst(file, date, line);
